@@ -23,7 +23,15 @@ void setup() {
   prefs.begin("modbusRtuGw");
   config.begin(&prefs);
   debugSerial.end();
-  debugSerial.begin(config.getSerialBaudRate(), config.getSerialConfig());
+
+  #if (ARDUINO_USB_CDC_ON_BOOT == 1)
+    // For ESP32-S3 (USB CDC)
+    debugSerial.begin();
+  #else
+    // For classic ESP32 (UART)
+    debugSerial.begin(config.getSerialBaudRate(), config.getSerialConfig());
+  #endif
+
   dbgln("[wifi] start");
   WiFi.mode(WIFI_STA);
   wm.setClass("invert");
