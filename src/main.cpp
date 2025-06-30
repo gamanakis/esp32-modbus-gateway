@@ -8,6 +8,11 @@
 #include <ModbusClientRTU.h>
 #include "config.h"
 #include "pages.h"
+#include "time.h"
+
+const char* ntpServer = "pool.ntp.org";
+const long gmtOffset_sec = 3600; // GMT+1
+const int daylightOffset_sec = 3600; // Summer
 
 AsyncWebServer webServer(80);
 Config config;
@@ -66,9 +71,28 @@ void setup() {
   dbgln("[modbus] finished");
   setupPages(&webServer, MBclient, &MBbridge, &config, &wm);
   webServer.begin();
+
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
   dbgln("[setup] finished");
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    Serial.println("Failed to obtain time");
+    return;
+  }
+
+  // Print time for debugging
+  Serial.printf("Time: %02d:%02d:%02d\n", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+
+  // Restart daily at 03:00
+  if (timeinfo.tm_hour == 3 && timeinfo.tm_min == 0 && timeinfo.tm_sec == 0) {
+    Serial.println("Restarting now...");
+    delay(1000); // Give some time for serial output
+    ESP.restart();
+  }
+
+  delay(1000);
 }
