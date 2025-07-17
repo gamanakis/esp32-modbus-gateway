@@ -10,6 +10,8 @@
 #include "pages.h"
 #include "time.h"
 
+unsigned long previousMillis = 0;
+unsigned long interval = 30000;
 const char* ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 3600; // GMT+1
 const int daylightOffset_sec = 3600; // Summer
@@ -78,6 +80,17 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
+  
+  unsigned long currentMillis = millis();
+  // if WiFi is down, try reconnecting
+  if ((WiFi.status() != WL_CONNECTED) && (currentMillis - previousMillis >=interval)) {
+    Serial.print(millis());
+    Serial.println("Reconnecting to WiFi...");
+    WiFi.disconnect();
+    WiFi.reconnect();
+    previousMillis = currentMillis;
+  }
+
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
     Serial.println("Failed to obtain time");
