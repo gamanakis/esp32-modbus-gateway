@@ -414,7 +414,7 @@ void setupPages(AsyncWebServer *server, ModbusClientRTU *rtu, ModbusBridgeWiFi *
     }
   }, [&](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
     
-    ADMIN_WEB_PASS;
+    //ADMIN_WEB_PASS;
 
     dbg("[webserver] OTA progress ");dbgln(index);
     if (!index) {
