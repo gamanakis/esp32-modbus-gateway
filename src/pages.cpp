@@ -317,7 +317,7 @@ void setupPages(AsyncWebServer *server, ModbusClientRTU *rtu, ModbusBridgeWiFi *
     dbgln("[webserver] GET /debug");
     auto *response = request->beginResponseStream("text/html");
     sendResponseHeader(response, "Debug");
-    sendDebugForm(response, "1", "1", "3", "1");
+    sendDebugForm(response, "1", "1", "3", "1", ""); // default values
     sendButton(response, "Back", "/");
     sendResponseTrailer(response);
     request->send(response);
@@ -343,6 +343,10 @@ void setupPages(AsyncWebServer *server, ModbusClientRTU *rtu, ModbusBridgeWiFi *
     if (request->hasParam("count", true)){
       count = request->getParam("count", true)->value();
     }
+    String write = "0";
+    if (request->hasParam("write", true)){
+      write = request->getParam("write", true)->value();
+    }
     auto *response = request->beginResponseStream("text/html");
     sendResponseHeader(response, "Debug");
     response->print("<pre>");
@@ -351,16 +355,31 @@ void setupPages(AsyncWebServer *server, ModbusClientRTU *rtu, ModbusBridgeWiFi *
     auto debug = WebPrint(previous, response);
     LOGDEVICE = &debug;
     MBUlogLvl = LOG_LEVEL_DEBUG;
-    ModbusMessage answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), func.toInt(), reg.toInt(), count.toInt());
+    ModbusMessage answer;
+
+    if (func == "6" ) { // Write single register
+      if (write == ""){
+        response->print("No write value specified");
+      } else {
+        uint16_t writeValue = write.toInt();
+        if (writeValue > 0xFFFF){
+          response->print("Write value must be between 0 and 65535");
+        } else {
+          answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), func.toInt(), reg.toInt(), writeValue);
+        }
+      }
+    } else {
+      answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), func.toInt(), reg.toInt(), count.toInt());
+    }
+
     MBUlogLvl = previousLevel;
     LOGDEVICE = previous;
     response->print("</pre>");
     auto error = answer.getError();
     if (error == SUCCESS){
-      auto count = answer[2];
+      auto count = answer.size() - 3; // remove server id, function code and byte count/error code
       response->print("<span >Answer: 0x");
-      for (size_t i = 0; i < count; i++)
-      {
+      for (size_t i = 0; i < count; i++) {
         response->printf("%02x", answer[i + 3]);
       }      
       response->print("</span>");
@@ -368,7 +387,7 @@ void setupPages(AsyncWebServer *server, ModbusClientRTU *rtu, ModbusBridgeWiFi *
     else{
       response->printf("<span class=\"e\">Error: %#02x (%s)</span>", error, ErrorName(error).c_str());
     }
-    sendDebugForm(response, slaveId, reg, func, count);
+    sendDebugForm(response, slaveId, reg, func, count, write);
     sendButton(response, "Back", "/");
     sendResponseTrailer(response);
     request->send(response);
@@ -594,7 +613,7 @@ void sendTableRow(AsyncResponseStream *response, const char *name, uint32_t valu
       "</tr>", name, value);
 }
 
-void sendDebugForm(AsyncResponseStream *response, String slaveId, String reg, String function, String count){
+void sendDebugForm(AsyncResponseStream *response, String slaveId, String reg, String function, String count, String write){
     response->print("<form method=\"post\">");
     response->print("<table>"
       "<tr>"
@@ -615,6 +634,7 @@ void sendDebugForm(AsyncResponseStream *response, String slaveId, String reg, St
               "<option value=\"2\">02 Read Discrete Inputs</option>"
               "<option value=\"3\">03 Read Holding Register</option>"
               "<option value=\"4\">04 Read Input Register</option>"
+              "<option value=\"6\">06 Write Single Register</option>"
             "</select>"
           "</td>"
         "</tr>"
@@ -632,6 +652,14 @@ void sendDebugForm(AsyncResponseStream *response, String slaveId, String reg, St
           "</td>"
           "<td>");
     response->printf("<input type=\"number\" min=\"0\" max=\"65535\" id=\"count\" name=\"count\" value=\"%s\">", count.c_str());
+    response->print("</td>"
+        "</tr>"
+        "<tr>"
+          "<td>"
+            "<label for=\"write\">Write</label>"
+          "</td>"
+          "<td>");
+    response->printf("<input type=\"number\" min=\"0\" max=\"65535\" id=\"write\" name=\"write\" value=\"%s\">", write.c_str());
     response->print("</td>"
         "</tr>"
       "</table>");
