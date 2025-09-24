@@ -1,4 +1,5 @@
 #include "pages.h"
+#include "time.h"
 #define ETAG "\"" __DATE__ "" __TIME__ "\""
 #define ADMIN_WEB_PASS  \
         if ((!config->getWebPassword().equals("")) && (!request->authenticate("admin", config->getWebPassword().c_str()))) \
@@ -368,6 +369,38 @@ void setupPages(AsyncWebServer *server, ModbusClientRTU *rtu, ModbusBridgeWiFi *
           answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), func.toInt(), reg.toInt(), writeValue);
         }
       }
+    } else if (func == "99") { // Write date to ECL210
+      time_t now;
+      time(&now);
+      struct tm * timeinfo = localtime (&now);
+      uint16_t year = timeinfo->tm_year + 1900;
+      uint16_t month = timeinfo->tm_mon + 1;
+      uint16_t day = timeinfo->tm_mday;
+      uint16_t hour = timeinfo->tm_hour;
+      uint16_t minute = timeinfo->tm_min;
+      Serial.printf("Writing date %04d-%02d-%02d %02d:%02d to ECL210\n", year, month, day, hour, minute);
+      // Write to registers: 64044 (hour), 64045 (minute), 64046 (day), 64047 (month), 64048 (year)
+      /*
+      uint16_t values[5];
+      values[0] = hour; 
+      values[1] = minute;
+      values[2] = day;
+      values[3] = month;
+      values[4] = year;
+      
+      ModbusMessage msg(slaveId.toInt(),    // serverID
+                        0x10,               // function code: Write Multiple Registers
+                        64044,              // starting register
+                        5,                  // number of registers
+                        (uint8_t)(5 * 2),   // byte count = numRegs * 2
+                        values);            // pointer to array of words      answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), msg);
+      answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), msg);
+      */
+      answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), 6, 64044, hour);
+      answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), 6, 64045, minute);
+      answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), 6, 64046, day);
+      answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), 6, 64047, month);
+      answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), 6, 64048, year);
     } else {
       answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), func.toInt(), reg.toInt(), count.toInt());
     }
@@ -389,6 +422,20 @@ void setupPages(AsyncWebServer *server, ModbusClientRTU *rtu, ModbusBridgeWiFi *
     }
     sendDebugForm(response, slaveId, reg, func, count, write);
     sendButton(response, "Back", "/");
+        
+    answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), 3, 64044, 5);
+    if (answer.getError() == SUCCESS && answer.size() >= 13) {
+        // answer[3] = byte count, answer[4..] = data
+        uint16_t hour   = (answer[3] << 8) | answer[4];
+        uint16_t minute = (answer[5] << 8) | answer[6];
+        uint16_t day    = (answer[7] << 8) | answer[8];
+        uint16_t month  = (answer[9] << 8) | answer[10];
+        uint16_t year   = (answer[11] << 8) | answer[12];
+        response->printf("<div><b>Set ECL210 time: </b> %04d-%02d-%02d %02d:%02d</div>", year, month, day, hour, minute);
+    } else {
+        response->print("<div><b>Could not read back date from ECL210</b></div>");
+    }
+    
     sendResponseTrailer(response);
     request->send(response);
   });
@@ -635,6 +682,7 @@ void sendDebugForm(AsyncResponseStream *response, String slaveId, String reg, St
               "<option value=\"3\">03 Read Holding Register</option>"
               "<option value=\"4\">04 Read Input Register</option>"
               "<option value=\"6\">06 Write Single Register</option>"
+              "<option value=\"99\">99 Write Date on ECL210</option>"
             "</select>"
           "</td>"
         "</tr>"
