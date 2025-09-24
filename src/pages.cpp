@@ -380,21 +380,21 @@ void setupPages(AsyncWebServer *server, ModbusClientRTU *rtu, ModbusBridgeWiFi *
       uint16_t minute = timeinfo->tm_min;
       Serial.printf("Writing date %04d-%02d-%02d %02d:%02d to ECL210\n", year, month, day, hour, minute);
       // Write to registers: 64044 (hour), 64045 (minute), 64046 (day), 64047 (month), 64048 (year)
-      /*
-      uint16_t values[5];
-      values[0] = hour; 
-      values[1] = minute;
-      values[2] = day;
-      values[3] = month;
-      values[4] = year;
-      
-      ModbusMessage msg(slaveId.toInt(),    // serverID
-                        0x10,               // function code: Write Multiple Registers
-                        64044,              // starting register
-                        5,                  // number of registers
-                        (uint8_t)(5 * 2),   // byte count = numRegs * 2
-                        values);            // pointer to array of words      answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), msg);
-      answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), msg);
+
+      /* ECL210 doesnt support FC16, it returns 01 90 01
+      01 = slave ID
+      90 = function code with error flag set (0x10 + 0x80)
+      01 = exception code = Illegal Function
+
+      uint16_t values[5] = { hour, minute, day, month, year };
+      answer = rtu->syncRequest(0xdeadbeef,
+                          slaveId.toInt(),
+                          0x10,           // FC16
+                          64044,          // starting register
+                          5,              // number of registers
+                          (uint8_t)(5*2), // byte count = 10
+                          values);        // pointer to array of words
+      So we write them one by one using FC6
       */
       answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), 6, 64044, hour);
       answer = rtu->syncRequest(0xdeadbeef, slaveId.toInt(), 6, 64045, minute);
