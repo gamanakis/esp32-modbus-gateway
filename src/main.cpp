@@ -44,7 +44,7 @@ void setup() {
   wm.setClass("invert");
   auto reboot = false;
   wm.setAPCallback([&reboot](WiFiManager *wifiManager){reboot = true;});
-  wm.autoConnect();
+  wm.autoConnect("esp32-modbus-rtu-gw", "password");
   if (reboot){
     ESP.restart();
   }
